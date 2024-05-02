@@ -165,12 +165,11 @@ class EnsembleDynamics:
         self,
         model: nn.Module,
         optim: torch.optim.Optimizer,
-        scaler: StandardScaler,
         terminal_fn: Callable[[np.ndarray, np.ndarray, np.ndarray], np.ndarray],
     ) -> None:
         self.model = model
         self.optim = optim
-        self.scaler = scaler
+        self.scaler = StandardScaler()
         self.terminal_fn = terminal_fn
 
     @ torch.no_grad()
