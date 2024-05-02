@@ -8,7 +8,7 @@ class ReplayBuffer:
     def __init__(
         self,
         buffer_size: int,
-        obs_shape: Tuple,
+        obs_dim: int,
         action_dim: int,
         device: str = "cpu"
     ) -> None:
@@ -19,8 +19,8 @@ class ReplayBuffer:
         self._ptr = 0
         self._size = 0
 
-        self.observations = np.zeros((self._max_size,) + self.obs_shape, dtype=np.float32)
-        self.next_observations = np.zeros((self._max_size,) + self.obs_shape, dtype=np.float32)
+        self.observations = np.zeros((self._max_size, obs_dim), dtype=np.float32)
+        self.next_observations = np.zeros((self._max_size, obs_dim), dtype=np.float32)
         self.actions = np.zeros((self._max_size, self.action_dim), dtype=np.float32)
         self.rewards = np.zeros((self._max_size, 1), dtype=np.float32)
         self.terminals = np.zeros((self._max_size, 1), dtype=np.float32)
@@ -90,5 +90,13 @@ class ReplayBuffer:
             "terminals": torch.from_numpy(self.terminals[batch_indexes]).to(self.device),
             "rewards": torch.from_numpy(self.rewards[batch_indexes]).to(self.device)
         }
-    
+if __name__ == '__main__':
+    import d4rl, gym
+    env = gym.make('hopper-medium-replay-v2')
+    data = env.get_dataset() 
+    buffer = ReplayBuffer(int(1e6), env.observation_space.shape[0], env.action_space.shape[0])
+    buffer.load_dataset(data)
+    samples = buffer.sample(64)
+    print(samples.keys())
+    print(samples['observations'].shape)
     
