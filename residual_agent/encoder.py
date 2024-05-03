@@ -15,7 +15,6 @@ class ConvEncoder(nn.Module):
         hidden_dim:int = 16,
     ):
         super().__init__()
-        self.hidden_dim = hidden_dim
         self.seq_len = seq_len
         self.state_emb = nn.Linear(state_dim, hidden_dim, bias=False)
         self.action_emb = nn.Linear(action_dim, hidden_dim, bias=False)
@@ -77,16 +76,18 @@ class EncoderModule():
         action_dim:int, 
         seq_len:int, 
         latent_dim:int = 16,
-        encocer_hidden:int = 16, 
+        encoder_hidden:int = 16, 
         decoder_hidden_dims:Optional[Tuple[int], List[int]]=(256, 256), 
         k_steps:int = 5,
         learning_rate: float = 0.0001, 
         omega_consistency: float = 0.1, # hyper-parameter for weighting consistency objective with respect to predictions
-        mu: torch.Tensor=0, # normalizing the output
-        std: torch.Tensor = 1 
+        mu: torch.Tensor = 0, # normalizing the output
+        std: torch.Tensor = 1, 
+        device:str = 'cpu', 
     ):
-        self.encoder = ConvEncoder(state_dim, action_dim, seq_len, latent_dim, encocer_hidden)
-        self.decoder = Deocdeer(state_dim, action_dim, latent_dim, decoder_hidden_dims)
+        self.device = torch.device(device)
+        self.encoder = ConvEncoder(state_dim, action_dim, seq_len, latent_dim, encoder_hidden).to(self.device)
+        self.decoder = Deocdeer(state_dim, action_dim, latent_dim, decoder_hidden_dims).to(self.device)
         self.optmizer = torch.optim.Adam(list(self.encoder.parameters()) + list(self.decoder.parameters()), learning_rate)
         self.k = k_steps
         self.seq_len = self.encoder.seq_len
