@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import torch
 import torch.nn as nn
@@ -175,12 +176,13 @@ class EnsembleDynamics:
         weight_decays: Optional[Union[List[float], Tuple[float]]] = None,
         device:str = 'cpu',
     ) -> None:
+        self.device = torch.device(device)
         self.model = EnsembleDynamicsModel(
             obs_dim, action_dim, hidden_dims, 
             num_ensemble = num_ensemble,
             num_elites = num_elites, 
             weight_decays=weight_decays, 
-            device=device)
+            device=self.device)
         self.optim = torch.optim.Adam(self.model.parameters(), learning_rate)
         self.scaler = StandardScaler()
         self.terminal_fn = terminal_fn
@@ -218,7 +220,7 @@ class EnsembleDynamics:
         obss = data["observations"]
         actions = data["actions"]
         next_obss = data["next_observations"]
-        rewards = data["rewards"]
+        rewards = data["rewards"].reshape(-1,1)
         delta_obss = next_obss - obss
         inputs = np.concatenate((obss, actions), axis=-1)
         targets = np.concatenate((delta_obss, rewards), axis=-1)
