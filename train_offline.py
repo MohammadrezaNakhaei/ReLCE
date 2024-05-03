@@ -62,8 +62,9 @@ def get_args():
 def train(args=get_args()):
     # create env and dataset
     env = gym.make(args.task)
-    obs_dim = env.observation_space.shaep[0]
+    obs_dim = env.observation_space.shape[0]
     action_dim = env.action_space.shape[0]
+    data = env.get_dataset()
 
     # seed
     random.seed(args.seed)
@@ -94,7 +95,7 @@ def train(args=get_args()):
         num_elites=args.n_elites, 
         weight_decays=args.dynamics_weight_decay,
         device=args.device)
-    dynamics.train(env.get_dataset(), logger)
+    dynamics.train(data, logger)
     
     # entropy regularization
     if args.auto_alpha:
@@ -130,16 +131,18 @@ def train(args=get_args()):
     )
     
     combo.train(
-        epoch=args.epoch,
+        data,
+        epoch = args.epoch,
         step_per_epoch = args.step_per_epoch,
         batch_size = args.batch_size,
         real_ratio = args.real_ratio,
         eval_episodes = args.eval_episodes, 
         rollout_freq = args.rollout_freq,
         rollout_batch_size = args.rollout_batch_size,
-        rollout_length = args.rollout_lenght,
-        model_retain_epochs = args.model_train_epochs ,   
+        rollout_length = args.rollout_length,
+        model_retain_epochs = args.model_retain_epochs ,   
         logger = logger, 
     )
-    
 
+if __name__ == '__main__':
+    train()

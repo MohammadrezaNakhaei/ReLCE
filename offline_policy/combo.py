@@ -73,7 +73,7 @@ class COMBO:
         self._with_lagrange = with_lagrange
         self._lagrange_threshold = lagrange_threshold
 
-        self.cql_log_alpha = torch.zeros(1, requires_grad=True, device=self.actor.device)
+        self.cql_log_alpha = torch.zeros(1, requires_grad=True, device=self.device)
         self.cql_alpha_optim = Adam([self.cql_log_alpha], lr=cql_alpha_lr)
 
         self._num_repeat_actions = num_repeart_actions     
@@ -100,11 +100,12 @@ class COMBO:
         obs: np.ndarray,
         deterministic: bool = False
     ) -> np.ndarray:
+        obs = torch.as_tensor(obs, device=self.device, dtype=torch.float32)
         action, _ = self.actforward(obs, deterministic)
         return action.cpu().numpy()
     
-    def train(
-        self, 
+    def train(self, 
+        data:Dict, 
         epoch: int = 1000,
         step_per_epoch: int = 1000,
         batch_size: int = 256,
@@ -114,11 +115,9 @@ class COMBO:
         rollout_batch_size:int = 50_000,
         rollout_length:int = 5,
         model_retain_epochs:int = 5,
-        lr_scheduler: Optional[torch.optim.lr_scheduler._LRScheduler] = None,
         logger: Logger=None,
-    ):
+    ) -> Dict:
         device = self.device
-        data = self.env.get_dataset()
         data_size = data['observations'].shape[0]
         real_buffer = ReplayBuffer(data_size, self.obs_dim, self.action_dim,device)
         real_buffer.load_dataset(data)
@@ -129,8 +128,8 @@ class COMBO:
         num_timesteps = 0
         last_10_performance = deque(maxlen=10)
         for e in range(1, epoch + 1):
-            self.train()
-            pbar = tqdm(range(step_per_epoch), desc=f"Epoch #{e}/{epoch}")
+            self._train()
+            pbar = tqdm.tqdm(range(step_per_epoch), desc=f"Epoch #{e}/{epoch}")
             for it in pbar:
                 if num_timesteps % rollout_freq == 0:
                     init_obss = real_buffer.sample(rollout_batch_size)["observations"].cpu().numpy()
@@ -156,8 +155,7 @@ class COMBO:
                         logger.logkv_mean(k, v)
                 
                 num_timesteps += 1
-            if lr_scheduler is not None:
-                lr_scheduler.step()
+
             # evaluate current policy
             eval_info = self._evaluate(eval_episodes)
             ep_reward_mean, ep_reward_std = np.mean(eval_info["eval/episode_reward"]), np.std(eval_info["eval/episode_reward"])
@@ -181,13 +179,13 @@ class COMBO:
         return {"last_10_performance": np.mean(last_10_performance)}
     
     def _evaluate(self, eval_episodes:int=10):
-        self.eval()
+        self._eval()
         obs = self.env.reset()
         eval_ep_info_buffer = []
         num_episodes = 0
         episode_reward, episode_length = 0, 0
         while num_episodes < eval_episodes:
-            action = select_action(obs.reshape(1, -1), deterministic=True)
+            action = self.select_action(obs.reshape(1, -1), deterministic=True)
             next_obs, reward, terminal, _ = self.env.step(action.flatten())
             episode_reward += reward
             episode_length += 1
@@ -198,7 +196,7 @@ class COMBO:
                 )
                 num_episodes +=1
                 episode_reward, episode_length = 0, 0
-                obs = self.eval_env.reset()
+                obs = self.env.reset()
         return {
             "eval/episode_reward": [ep_info["episode_reward"] for ep_info in eval_ep_info_buffer],
             "eval/episode_length": [ep_info["episode_length"] for ep_info in eval_ep_info_buffer]
@@ -265,7 +263,7 @@ class COMBO:
         batch_size = len(obss)
         random_actions = torch.FloatTensor(
             batch_size * self._num_repeat_actions, actions.shape[-1]
-        ).uniform_(self.action_space.low[0], self.action_space.high[0]).to(self.actor.device)
+        ).uniform_(-1, 1).to(self.device)
         # tmp_obss & tmp_next_obss: (batch_size * num_repeat, obs_dim)
         tmp_obss = obss.unsqueeze(1) \
             .repeat(1, self._num_repeat_actions, 1) \
@@ -353,9 +351,9 @@ class COMBO:
         for _ in range(rollout_length):
             if self._uniform_rollout:
                 actions = np.random.uniform(
-                    self.action_space.low[0],
-                    self.action_space.high[0],
-                    size=(len(observations), self.action_space.shape[0])
+                    -1,
+                    1,
+                    size=(len(observations), self.action_dim)
                 )
             else:
                 actions = self.select_action(observations)
@@ -413,12 +411,12 @@ class COMBO:
 
         return q1 - log_prob1, q2 - log_prob2
 
-    def train(self) -> None:
+    def _train(self) -> None:
         self.actor.train()
         self.critic1.train()
         self.critic2.train()
 
-    def eval(self) -> None:
+    def _eval(self) -> None:
         self.actor.eval()
         self.critic1.eval()
         self.critic2.eval()
@@ -435,3 +433,4 @@ class COMBO:
         self.actor.load_state_dict(data['actor'])
         self.critic1.load_state_dict(data['critic1'])
         self.critic2.load_state_dict(data['critic2'])
+        

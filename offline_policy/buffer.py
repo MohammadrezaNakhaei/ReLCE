@@ -13,7 +13,7 @@ class ReplayBuffer:
         device: str = "cpu"
     ) -> None:
         self._max_size = buffer_size
-        self.obs_shape = obs_shape
+        self.obs_dim = obs_dim
         self.action_dim = action_dim
 
         self._ptr = 0
