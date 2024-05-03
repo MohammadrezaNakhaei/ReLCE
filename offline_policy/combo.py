@@ -7,7 +7,7 @@ import torch.nn as nn
 from torch.nn import functional as F
 from torch.optim import Adam
 import gym
-from typing import Dict, Union, Tuple
+from typing import Dict, Union, Tuple, List, Optional
 from collections import defaultdict, deque
 
 from offline_policy.dynamics import EnsembleDynamics
@@ -18,7 +18,7 @@ from utils import Actor, Critic, Logger
 class COMBO:
     def __init__(
         self, 
-        env: gym.ENV, 
+        env: gym.Env, 
         dynamic_module: EnsembleDynamics,
         hidden_dims: Union[List[int], Tuple[int]],
         actor_lr: float = 1e-4,
@@ -36,18 +36,20 @@ class COMBO:
         num_repeart_actions:int = 10,
         uniform_rollout: bool = False,
         rho_s: str = "mix",
+        device:str = 'cpu',
     ):
         self.env = env
         self.dynamics = dynamic_module
-        
+        self.device = torch.device(device)
+        assert self.dynamics.device == self.device, 'dynamic model and policy should be on the same device'
         self.obs_dim = env.observation_space.shape[0]
         self.action_dim = env.action_space.shape[0]
         self.hidden_dims = hidden_dims
         
-        self.actor = Actor(self.obs_dim, self.action_dim, hidden_dims)
+        self.actor = Actor(self.obs_dim, self.action_dim, hidden_dims).to(self.device)
         self.actor_old = deepcopy(self.actor)
-        self.critic1 = Critic(self.obs_dim, self.action_dim, hidden_dims)
-        self.critic2 = Critic(self.obs_dim, self.action_dim, hidden_dims)
+        self.critic1 = Critic(self.obs_dim, self.action_dim, hidden_dims).to(self.device)
+        self.critic2 = Critic(self.obs_dim, self.action_dim, hidden_dims).to(self.device)
         self.critic1_old, self.critic2_old = deepcopy(self.critic1) , deepcopy(self.critic2)
         self.actor_optim = Adam(self.actor.parameters(), actor_lr)
         self.critic1_optim =  Adam(self.critic1.parameters(), critic_lr)
@@ -114,8 +116,8 @@ class COMBO:
         model_retain_epochs:int = 5,
         lr_scheduler: Optional[torch.optim.lr_scheduler._LRScheduler] = None,
         logger: Logger=None,
-        device:str='cpu',
     ):
+        device = self.device
         data = self.env.get_dataset()
         data_size = data['observations'].shape[0]
         real_buffer = ReplayBuffer(data_size, self.obs_dim, self.action_dim,device)
