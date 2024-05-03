@@ -47,7 +47,6 @@ class COMBO:
         self.hidden_dims = hidden_dims
         
         self.actor = Actor(self.obs_dim, self.action_dim, hidden_dims).to(self.device)
-        self.actor_old = deepcopy(self.actor)
         self.critic1 = Critic(self.obs_dim, self.action_dim, hidden_dims).to(self.device)
         self.critic2 = Critic(self.obs_dim, self.action_dim, hidden_dims).to(self.device)
         self.critic1_old, self.critic2_old = deepcopy(self.critic1) , deepcopy(self.critic2)
