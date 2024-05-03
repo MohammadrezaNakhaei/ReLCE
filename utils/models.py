@@ -35,25 +35,24 @@ class Actor(nn.Module):
         self, 
         obs_dim:int, 
         action_dim:int, 
-        hidden_size:Union[List[int], Tuple[int]], 
+        hidden_dims:Union[List[int], Tuple[int]], 
         activation:nn.Module = nn.ReLU, 
         sigma_min:float = -5.0,
         sigma_max:float = 2.0,
     ) -> None:
         super().__init__()
-        layers = [obs_dim, *hidden_sizem, action_dim]
+        neurons = [obs_dim, *hidden_dims, action_dim]
         self._sigma_min = sigma_min
         self._sigma_max = sigma_max
         layers = nn.ModuleList()
-        for l1, l2 in zip(layers[:-1], layers[1:]):
+        for l1, l2 in zip(neurons[:-1], neurons[1:]):
             layers.append(nn.Linear(l1, l2))
             layers.append(activation())
-        layers.pop()
+        layers.pop(-1)
         self.mu = nn.Sequential(*layers)
         self.sigma_param = nn.Parameter(torch.zeros(action_dim, 1))
         
     def forward(self, obs: Union[np.ndarray, torch.Tensor]) -> torch.distributions.Normal:
-        obs = torch.as_tensor(obs, device=self.device, dtype=torch.float32)
         mu = self.mu(obs)
         shape = [1] * len(mu.shape)
         shape[1] = -1
@@ -67,25 +66,23 @@ class Critic(nn.Module):
         self, 
         obs_dim:int, 
         action_dim:int, 
-        hidden_size:Union[List[int], Tuple[int]], 
+        hidden_dims:Union[List[int], Tuple[int]], 
         activation:nn.Module = nn.ReLU, 
     ) -> None:
         super().__init__()
-        layers = [obs_dim+action_dim, *hidden_size, 1]
+        neurons = [obs_dim+action_dim, *hidden_dims, 1]
         layers = nn.ModuleList()
-        for l1, l2 in zip(layers[:-1], layers[1:]):
+        for l1, l2 in zip(neurons[:-1], neurons[1:]):
             layers.append(nn.Linear(l1, l2))
             layers.append(activation())
-        layers.pop()
+        layers.pop(-1)
         self.q = nn.Sequential(*layers)
         
     def forward(
         self,
         obs: Union[np.ndarray, torch.Tensor],
-        actions: Optional[Union[np.ndarray, torch.Tensor]] = None
+        actions: Optional[Union[np.ndarray, torch.Tensor]] = None, 
     ) -> torch.Tensor:
-        obs = torch.as_tensor(obs, device=self.device, dtype=torch.float32)
         if actions is not None:
-            actions = torch.as_tensor(actions, device=self.device, dtype=torch.float32).flatten(1)
             obs = torch.cat([obs, actions], dim=1)
         return self.q(obs)
