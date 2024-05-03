@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
-from typing import Dict, List, Union, Tuple, Optional
+from typing import Dict, List, Union, Tuple, Optional, Callable
 from utils import Logger, StandardScaler
 
 
@@ -86,12 +86,13 @@ class EnsembleDynamicsModel(nn.Module):
         activation: nn.Module = Swish,
         weight_decays: Optional[Union[List[float], Tuple[float]]] = None,
         with_reward: bool = True,
+        device: str = 'cpu',
     ) -> None:
         super().__init__()
+        self.device = torch.device(device)
         self.num_ensemble = num_ensemble
         self.num_elites = num_elites
         self._with_reward = with_reward
-        self.device = torch.device(device)
         self.activation = activation()
         assert len(weight_decays) == (len(hidden_dims) + 1)
 
@@ -123,6 +124,7 @@ class EnsembleDynamicsModel(nn.Module):
             "elites",
             nn.Parameter(torch.tensor(list(range(0, self.num_elites))), requires_grad=False)
         )
+        self.to(self.device)
 
     def forward(self, obs_action: np.ndarray) -> Tuple[torch.Tensor, torch.Tensor]:
         obs_action = torch.as_tensor(obs_action, dtype=torch.float32).to(self.device)
@@ -163,12 +165,23 @@ class EnsembleDynamicsModel(nn.Module):
 class EnsembleDynamics:
     def __init__(
         self,
-        model: nn.Module,
-        optim: torch.optim.Optimizer,
+        obs_dim:int, 
+        action_dim:int, 
+        hidden_dims: Union[Tuple[int], List[int]],
+        learning_rate: float, 
         terminal_fn: Callable[[np.ndarray, np.ndarray, np.ndarray], np.ndarray],
+        num_ensemble: int = 7,
+        num_elites: int = 5,
+        weight_decays: Optional[Union[List[float], Tuple[float]]] = None,
+        device:str = 'cpu',
     ) -> None:
-        self.model = model
-        self.optim = optim
+        self.model = EnsembleDynamicsModel(
+            obs_dim, action_dim, hidden_dims, 
+            num_ensemble = num_ensemble,
+            num_elites = num_elites, 
+            weight_decays=weight_decays, 
+            device=device)
+        self.optim = torch.optim.Adam(self.model.parameters(), learning_rate)
         self.scaler = StandardScaler()
         self.terminal_fn = terminal_fn
 
