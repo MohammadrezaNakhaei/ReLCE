@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import MutableMapping, Optional, Tuple
+from typing import MutableMapping, Optional, Tuple, List, Union
 import numpy as np
 
 
@@ -54,7 +54,7 @@ class Deocdeer(nn.Module):
                  state_dim:int, 
                  action_dim:int, 
                  latent_dim:int, 
-                 hidden_dims:Optional[Tuple[int], List[int]]=(256, 256)
+                 hidden_dims:Union[Tuple[int], List[int]]=(256, 256)
     ):
         super().__init__()
         n_layers = [state_dim+action_dim+latent_dim, *hidden_dims, state_dim]
@@ -77,7 +77,7 @@ class EncoderModule():
         seq_len:int, 
         latent_dim:int = 16,
         encoder_hidden:int = 16, 
-        decoder_hidden_dims:Optional[Tuple[int], List[int]]=(256, 256), 
+        decoder_hidden_dims:Union[Tuple[int], List[int]]=(256, 256), 
         k_steps:int = 5,
         learning_rate: float = 0.0001, 
         omega_consistency: float = 0.1, # hyper-parameter for weighting consistency objective with respect to predictions
