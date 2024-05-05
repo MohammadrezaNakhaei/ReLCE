@@ -18,8 +18,6 @@ from residual_agent.encoder import EncoderModule
 from residual_agent.sequence_buffer import NSequenceBuffer
 
 class Residual:
-    EVAL_EVERY = 5000
-    SAVE_EVERY = 50000
     def __init__(
         self, 
         env: gym.Env, 
@@ -35,7 +33,7 @@ class Residual:
         seq_len:int = 10, 
         latent_dim:int = 16,
         encocer_hidden:int = 16, 
-        decoder_hidden_dims:Optional[Tuple[int], List[int]]=(256, 256), 
+        decoder_hidden_dims:Union[Tuple[int], List[int]]=(256, 256), 
         k_steps:int = 5,
         encoder_lr: float = 0.0001, 
         omega_consistency: float = 0.1,
@@ -78,7 +76,7 @@ class Residual:
             device = device
         )
         # residual networks
-        self.actor = Actor(self.res_obs_dim, action_dim, hidden_dims).to(self.device)
+        self.actor = Actor(self.res_obs_dim, self.action_dim, hidden_dims).to(self.device)
         self.critic1 = Critic(self.res_obs_dim, self.action_dim, hidden_dims).to(self.device)
         self.critic2 = Critic(self.res_obs_dim, self.action_dim, hidden_dims).to(self.device)
         self.critic1_old, self.critic2_old = deepcopy(self.critic1), deepcopy(self.critic2)
@@ -316,11 +314,13 @@ class Residual:
         self.encoder.decoder.load_state_dict(data['decoder'])
         
     def train(self, 
-              max_step:int = int(5e5), 
+              max_step:int = int(2e5), 
               warm_up:int = 20, 
               update_ratio:int = 1, 
+              logger:Logger = None, 
               eval_episodes:int = 10, 
-              logger:Logger = None
+              eval_every:int = 5000,
+              save_every: int = 50000,
     ):
         # initial offline evaluation
         eval_info = self.evaluate(only_offline=True)
@@ -379,8 +379,8 @@ class Residual:
                 if logger:
                     for key,val in loss.items():
                         logger.logkv_mean(key, val)
-                if self.total_t%self.EVAL_EVERY==0:
-                    eval_info = self.evaluate( deterministic=True, num_eval=eval_episodes)
+                if self.total_t%eval_every==0:
+                    eval_info = self.evaluate(deterministic=True, num_eval=eval_episodes)
                     ep_reward_mean, ep_reward_std = np.mean(eval_info["eval/episode_reward"]), np.std(eval_info["eval/episode_reward"])
                     ep_length_mean, ep_length_std = np.mean(eval_info["eval/episode_length"]), np.std(eval_info["eval/episode_length"])
                     norm_ep_rew_mean = self.env.get_normalized_score(ep_reward_mean) * 100
@@ -397,7 +397,7 @@ class Residual:
                         path = os.path.join(logger.model_dir, f'ReLCE_best.pth')
                         self.save(path)
                         best_reward = norm_ep_rew_mean
-                if self.total_t%self.SAVE_EVERY==0 and logger:
+                if self.total_t%save_every==0 and logger:
                     path = os.path.join(logger.model_dir, f'ReLCE_{self.total_t}.pth')
                     self.save(path)
                     
