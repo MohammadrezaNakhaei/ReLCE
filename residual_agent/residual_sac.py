@@ -157,11 +157,13 @@ class Residual:
                 context_actions = torch.from_numpy(context_actions).unsqueeze(0).to(self.device)
                 time_step = torch.arange(context_actions.shape[1]).unsqueeze(0).to(self.device)
                 encoded = self.encoder(context_state, context_actions, time_step).squeeze(0) # context encoder
-                res_state = self._res_state(obs_tensor, offline_act, encoded) # augmented state
-                res_action, _ = self.agent.select_action(res_state, deterministic=deterministic) 
-                action = self._total_action(offline_act, res_action) 
+                res_state = self._res_state(obs_tensor, offline_action, encoded) # augmented state
+                res_action, _ = self.res_actforward(res_state, deterministic=deterministic) 
+                action = self._total_action(offline_action, res_action) 
                 action = action.cpu().numpy()
             next_obs, reward, terminal, _ = self.eval_env.step(action)
+            ep_states.append(next_obs)
+            ep_actions.append(action)
             episode_reward += reward
             episode_length += 1
             obs = next_obs
@@ -343,6 +345,7 @@ class Residual:
             # start of the episode
             obs, done = self.env.reset(), False
             ep_reward = 0
+            ep_length = 0
             # used for saving episode to the buffer
             ep_states = [obs,]
             ep_actions = []
@@ -366,20 +369,22 @@ class Residual:
                         encoded = self.encoder(context_state, context_actions, time_step).squeeze(0) # context encoder, remove batch dim
                         res_state = self._res_state(obs_tensor, offline_act, encoded) # augmented state
                         res_action,_ = self.res_actforward(res_state)
-                        action = self._total_action(offline_act.cpu().numpy(), res_action)
+                        action = self._total_action(offline_act, res_action)
+                        action = action.cpu().numpy()
                 obs, reward, done, info = self.env.step(action)
                 ep_states.append(obs)
                 ep_actions.append(action)
                 ep_rewards.append(reward)
                 ep_reward += reward
                 self.total_t+=1
+                ep_length += 1
 
                 loss = self.train_sample(update_ratio)
                 if logger:
                     for key,val in loss.items():
                         logger.logkv_mean(key, val)
                 if self.total_t%eval_every==0:
-                    eval_info = self.evaluate(deterministic=True, num_eval=eval_episodes)
+                    eval_info = self.evaluate(deterministic=True, eval_episodes=eval_episodes)
                     ep_reward_mean, ep_reward_std = np.mean(eval_info["eval/episode_reward"]), np.std(eval_info["eval/episode_reward"])
                     ep_length_mean, ep_length_std = np.mean(eval_info["eval/episode_length"]), np.std(eval_info["eval/episode_length"])
                     norm_ep_rew_mean = self.env.get_normalized_score(ep_reward_mean) * 100
@@ -392,7 +397,7 @@ class Residual:
                         logger.logkv("eval/episode_length_std", ep_length_std)
                         logger.dumpkvs()
                         
-                    if eval_reward>best_reward and logger:
+                    if norm_ep_rew_mean>best_reward and logger:
                         path = os.path.join(logger.model_dir, f'ReLCE_best.pth')
                         self.save(path)
                         best_reward = norm_ep_rew_mean
@@ -411,6 +416,7 @@ class Residual:
             ))        
             self.train_iter = iter(self.data_loader)   
             ep_reward = self.env.get_normalized_score(ep_reward)*100
-            self.logger.logkv('reward', ep_reward)      
-            self.logger.set_timestep(self.total_t) 
-            self.logger.dumpkvs()  
+            logger.logkv('normalized_episode_reward', ep_reward)      
+            logger.logkv('episode_length', ep_length)   
+            logger.set_timestep(self.total_t) 
+            logger.dumpkvs()  
