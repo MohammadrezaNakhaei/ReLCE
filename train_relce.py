@@ -9,6 +9,7 @@ import d4rl
 import numpy as np
 import torch
 
+from residual_agent.residual_sac import Residual
 from offline_policy.combo import COMBO
 from offline_policy.dynamics import EnsembleDynamics
 from utils.modify_env import TrainingEnv
@@ -18,12 +19,9 @@ from utils.termination_fns import get_termination_fn
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--offline-path', type=str, required=True, help='Enter the path for offline agent to load')
-
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--max-steps", type=int, default=int(2e5))
-    
-    parser.add_argument('--n-update', type=int, default=1, help='number of updates in each samples')
-    
+    parser.add_argument('--utd', type=int, default=1, help='number of updates for each interaction')
     parser.add_argument("--actor-lr", type=float, default=1e-4)
     parser.add_argument("--critic-lr", type=float, default=3e-4)
     parser.add_argument("--hidden-dims", type=int, nargs='*', default=[256, 256])
@@ -39,15 +37,11 @@ def get_args():
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument('--num-workers', type=int, default=4, help='number of cpu cores used to prepare data')
     parser.add_argument("--encoder-lr", type=float, default=1e-4, help='learning rate for encoder')
-    
-    parser.add_argument("--encoder-points", type=int, default=4, help='number of subtrajectories used to train the encoder, mean value is used for training')
-    
-    parser.add_argument("--omega", type=float, default=0.6, help='coefficient for context/offline actions')
-    
-    parser.add_argument("--hidden-dims-predictor", type=int, nargs='*', default=[256, 256])
-    
-    parser.add_argument("--loss-sim", type=float, default=0.2, help='Coefficient for similarity loss in N points from one trajectory')
-    
+    parser.add_argument("--num-same-samples", type=int, default=4, help='number of subtrajectories used to train the encoder, mean value is used for training')
+    parser.add_argument("--action-alpha", type=float, default=0.75, help='coefficient for context/offline actions')
+    parser.add_argument("--encoder-hidden", type=int, default=16)
+    parser.add_argument("--decoder-hidden-dims", type=int, nargs='*', default=[256, 256])
+    parser.add_argument("--omega", type=float, default=0.2, help='Coefficient for similarity loss in N points from one trajectory')
     parser.add_argument("--k-steps", type=int, default=5, help='Number of future steps for prediction loss in training the encoder')
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--tag", type=str, default='', help='used for logging')
@@ -134,7 +128,57 @@ def train(args=get_args()):
     combo.load(policy_path)
     
     
+    # initializing the residual agent 
+    # entropy term
+    if args.auto_alpha:
+        target_entropy = args.target_entropy if args.target_entropy \
+            else -np.prod(env.action_space.shape)
+        args.target_entropy = target_entropy
+        log_alpha = torch.zeros(1, requires_grad=True, device=args.device)
+        alpha_optim = torch.optim.Adam([log_alpha], lr=args.alpha_lr)
+        alpha = (target_entropy, log_alpha, alpha_optim)
+    else:
+        alpha = args.alpha
     
+    # normalizeing mean and std for decoder prediction objectives
+    dataset = env.get_dataset()
+    delta = dataset['next_observations']-dataset['observations']
+    delta = torch.as_tensor(delta, device=args.device, dtype=torch.float32)
+    mu = torch.mean(delta, 0)
+    std = torch.std(delta, 0)
+    
+    res_agent = Residual(
+        env, eval_env, combo,
+        hidden_dims = args.hidden_dims,
+        actor_lr = args.actor_lr, 
+        critic_lr = args.critic_lr, 
+        tau = args.tau, 
+        gamma = args.gamma, 
+        alpha = alpha, 
+        seq_len = args.seq_len, 
+        latent_dim = args.latent_dim, 
+        encocer_hidden = args.encoder_hidden,
+        decoder_hidden_dims = args.decoder_hidden_dims,
+        k_steps = args.k_steps, 
+        encoder_lr = args.encoder_lr, 
+        omega_consistency = args.omega, 
+        buffer_size = args.buffer_size, 
+        num_same_samples = args.num_same_samples, 
+        batch_size = args.batch_size, 
+        num_worker = args.num_workers, 
+        action_alpha = args.action_alpha, 
+        mu = mu, 
+        std = std,
+        device=args.device,
+    )
+ 
+ 
+    res_agent.train(
+        max_step = args.max_steps, 
+        update_ratio =  args.utd, 
+        logger = logger, 
+        
+    )
 if __name__ == '__main__':
     train()
     
