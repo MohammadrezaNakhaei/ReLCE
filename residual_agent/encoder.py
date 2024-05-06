@@ -16,6 +16,7 @@ class ConvEncoder(nn.Module):
     ):
         super().__init__()
         self.seq_len = seq_len
+        self.hidden_dim = hidden_dim
         self.state_emb = nn.Linear(state_dim, hidden_dim, bias=False)
         self.action_emb = nn.Linear(action_dim, hidden_dim, bias=False)
         self.conv = nn.Sequential(
@@ -88,7 +89,7 @@ class EncoderModule():
         self.device = torch.device(device)
         self.encoder = ConvEncoder(state_dim, action_dim, seq_len, latent_dim, encoder_hidden).to(self.device)
         self.decoder = Deocdeer(state_dim, action_dim, latent_dim, decoder_hidden_dims).to(self.device)
-        self.optmizer = torch.optim.Adam(list(self.encoder.parameters()) + list(self.decoder.parameters()), learning_rate)
+        self.optimizer = torch.optim.Adam(list(self.encoder.parameters()) + list(self.decoder.parameters()), learning_rate)
         self.k = k_steps
         self.seq_len = self.encoder.seq_len
         self.mu = mu
@@ -104,7 +105,6 @@ class EncoderModule():
         action = batch['action']
         next_state = batch['next_state']
         B, N, T, _ = seq_states.shape
-
         # assert self.k + self.seq_len == T
         idx = np.random.randint(N)
         latents = self.encode_multiple(seq_states[:, :, :self.seq_len, :], seq_actions[:, :, :self.seq_len, :], seq_masks[:, :, :self.seq_len])
@@ -124,7 +124,7 @@ class EncoderModule():
             target = self._normalize(seq_states[:,:,start_ind+j+1]- seq_states[:,:,start_ind+j])
             loss_pred += F.mse_loss(pred_diff, target)
             state = self._unnormalize(pred_diff)+state
-        loss = loss_pred + self.alpha_sim*loss_sim 
+        loss = loss_pred + self.omega*loss_sim 
         loss.backward()
         self.optimizer.step()
         return {
