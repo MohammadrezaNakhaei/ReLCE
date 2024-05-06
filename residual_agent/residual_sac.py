@@ -96,7 +96,7 @@ class Residual:
             self._alpha = alpha 
             
         # buffer
-        self.buffer = NSequenceBuffer(buffer_size, seq_len, num_same_samples)
+        self.buffer = NSequenceBuffer(buffer_size, seq_len+k_steps, num_same_samples)
         self.data_loader = DataLoader(self.buffer, batch_size=batch_size, num_workers=num_worker)
         
         self.coeff = action_alpha
@@ -123,7 +123,7 @@ class Residual:
             ep_actions = []
             ep_rewards = []
             while not done:
-                action = self.offline.select_action(torch.as_tensor(obs).to(self.device), deterministic=False) # offline policy action
+                action = self.offline.select_action(torch.as_tensor(obs, device=self.device), deterministic=False) # offline policy action
                 obs, reward, done, info = self.env.step(action)
                 ep_states.append(obs)
                 ep_actions.append(action)
@@ -161,7 +161,6 @@ class Residual:
                 res_action, _ = self.agent.select_action(res_state, deterministic=deterministic) 
                 action = self._total_action(offline_act, res_action) 
                 action = action.cpu().numpy()
-
             next_obs, reward, terminal, _ = self.eval_env.step(action)
             episode_reward += reward
             episode_length += 1
@@ -201,8 +200,8 @@ class Residual:
             next_state = next_state
             )
         with torch.no_grad():
-            offline_act, _ = self.policy.actforward(state, True) # offline policy action
-            next_offline_act, _ = self.policy.actforward(next_state, True)
+            offline_act, _ = self.offline.actforward(state, True) # offline policy action
+            next_offline_act, _ = self.offline.actforward(next_state, True)
             latents = self.encoder.encode_multiple(seq_states, seq_actions, seq_masks)
             idx = np.random.randint(latents.shape[1])
             latents = latents.mean(1) # batch dim, N, latent dim
@@ -319,7 +318,7 @@ class Residual:
               update_ratio:int = 1, 
               logger:Logger = None, 
               eval_episodes:int = 10, 
-              eval_every:int = 5000,
+              eval_every:int = 10000,
               save_every: int = 50000,
     ):
         # initial offline evaluation
@@ -331,13 +330,13 @@ class Residual:
         norm_ep_rew_std = self.env.get_normalized_score(ep_reward_std) * 100
         if logger:
             logger.log('Offline policy performance:')
-            logger.log(f'Mean return: {norm_ep_rew_mean}, std return: {norm_ep_rew_std}')
+            logger.log(f'Mean return: {norm_ep_rew_mean:.3f}, std return: {norm_ep_rew_std:.3f}')
             logger.logkv("eval/normalized_episode_reward", norm_ep_rew_mean)
             logger.logkv("eval/normalized_episode_reward_std", norm_ep_rew_std)
             logger.logkv("eval/episode_length", ep_length_mean)
             logger.logkv("eval/episode_length_std", ep_length_std)
             logger.log('Start training of the residual agent')
-            self.logger.dumpkvs()
+            logger.dumpkvs()
         self.warm_up(warm_up)
         best_reward = 0
         while True:
@@ -352,7 +351,7 @@ class Residual:
                 obs_tensor = torch.as_tensor(obs, dtype=torch.float32).to(self.device)
                 # action of offline RL agent
                 with torch.no_grad():
-                    offline_act, _ = self.oggline.actforward(obs_tensor, True) # offline policy action
+                    offline_act, _ = self.offline.actforward(obs_tensor, True) # offline policy action
                 # first step, no context encoder to be used 
                 if len(ep_actions)<self.seq_len:
                     action = offline_act.cpu().numpy()
@@ -402,6 +401,8 @@ class Residual:
                     self.save(path)
                     
             if self.total_t>max_step:
+                if logger:
+                    logger.close()
                 break
             
             ep_states, ep_actions, ep_rewards = [np.array(lst, dtype=np.float32) for lst in (ep_states, ep_actions, ep_rewards)]
