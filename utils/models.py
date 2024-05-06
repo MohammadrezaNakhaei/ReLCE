@@ -5,6 +5,7 @@ from torch.distributions import Normal
 
 from typing import Dict, List, Union, Tuple, Optional
 
+
 class TanhNormalWrapper(Normal):
     def log_prob(self, action, raw_action=None):
         if raw_action is None:
@@ -41,7 +42,8 @@ class Actor(nn.Module):
         sigma_max:float = 2.0,
     ) -> None:
         super().__init__()
-        neurons = [obs_dim, *hidden_dims, action_dim]
+        self.action_dim = action_dim
+        neurons = [obs_dim, *hidden_dims, 2*action_dim]
         self._sigma_min = sigma_min
         self._sigma_max = sigma_max
         layers = nn.ModuleList()
@@ -49,16 +51,13 @@ class Actor(nn.Module):
             layers.append(nn.Linear(l1, l2))
             layers.append(activation())
         layers.pop(-1)
-        self.mu = nn.Sequential(*layers)
-        self.sigma_param = nn.Parameter(torch.zeros(action_dim, 1))
+        self.out = nn.Sequential(*layers)
         
     def forward(self, obs: Union[np.ndarray, torch.Tensor]) -> torch.distributions.Normal:
-        mu = self.mu(obs)
-        shape = [1] * len(mu.shape)
-        shape[1] = -1
-        sigma = (self.sigma_param.view(shape) + torch.zeros_like(mu)).exp()
+        out = self.out(obs)
+        mu, logstd = torch.split(out, self.action_dim, -1)
+        sigma = torch.clamp(logstd, min=self._sigma_min, max=self._sigma_max).exp()
         return TanhNormalWrapper(mu, sigma)
-        
         
 
 class Critic(nn.Module):
