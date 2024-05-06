@@ -29,3 +29,6 @@ class TrainingEnv(gym.Env):
     
     def get_normalized_score(self, score):
         return self._env.get_normalized_score(score)
+    
+    def get_dataset(self,):
+        return self._env.get_dataset()
