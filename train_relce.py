@@ -44,7 +44,7 @@ def get_args():
     parser.add_argument("--omega", type=float, default=0.2, help='Coefficient for similarity loss in N points from one trajectory')
     parser.add_argument("--k-steps", type=int, default=5, help='Number of future steps for prediction loss in training the encoder')
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
-    parser.add_argument("--tag", type=str, default='', help='used for logging')
+    parser.add_argument("--run-name", type=str, default='', help='used for logging')
     return parser.parse_args()
 
 def train(args=get_args()):
@@ -60,7 +60,7 @@ def train(args=get_args()):
     offline_args = load_args(offline_log_path)
     
     # logger
-    log_dirs = make_log_dirs(offline_args.task, 'relce', args.seed, vars(args), record_params=['tag'])
+    log_dirs = make_log_dirs(offline_args.task, 'relce', args.seed, vars(args), run_name=args.run_name)
     output_config = {
         "consoleout_backup": "stdout",
         "policy_training_progress": "csv",

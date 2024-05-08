@@ -17,7 +17,7 @@ from offline_policy.combo import COMBO
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--task", type=str, default="hopper-medium-v2")
-    parser.add_argument("--seed", type=int, default=1)
+    parser.add_argument("--seed", type=int, default=10)
     parser.add_argument("--actor-lr", type=float, default=1e-4)
     parser.add_argument("--critic-lr", type=float, default=3e-4)
     parser.add_argument("--hidden-dims", type=int, nargs='*', default=[256, 256, 256])
@@ -55,7 +55,7 @@ def get_args():
     parser.add_argument("--eval-episodes", type=int, default=10)
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
-    parser.add_argument('--tag', type=str, default='', help='used for logging to distingush different runs')
+    parser.add_argument('--run-name', type=str, default='', help='used for logging to distingush different runs')
     return parser.parse_args()
 
 
@@ -75,7 +75,7 @@ def train(args=get_args()):
     env.seed(args.seed)
     
     # logger
-    log_dirs = make_log_dirs(args.task, 'combo', args.seed, vars(args), record_params=['tag'])
+    log_dirs = make_log_dirs(args.task, 'combo', args.seed, vars(args), run_name=args.run_name)
     output_config = {
         "consoleout_backup": "stdout",
         "policy_training_progress": "csv",

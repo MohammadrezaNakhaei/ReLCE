@@ -349,11 +349,10 @@ def make_log_dirs(
     algo_name: str,
     seed: int,
     args: Dict,
-    record_params: Optional[List]=None
+    run_name: str = '',
 ) -> str:
-    if record_params is not None:
-        for param_name in record_params:
-            algo_name += f"&{param_name}={args[param_name]}"
+    if run_name:
+        algo_name += f"_{run_name}"
     exp_name = f"seed_{seed}"
     log_dirs = os.path.join(ROOT_DIR, task_name, algo_name, exp_name)
     os.makedirs(log_dirs, exist_ok=True)
